@@ -6,6 +6,8 @@
 <title>CHK Admin AV Inventory</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 :root{
   --cr:#7a1228;--crd:#560d1d;--crde:#3a0810;--crl:#a01535;
@@ -413,7 +415,33 @@ body{min-height:100vh;overflow-x:hidden}
       <div id="adm-locs"></div>
     </div>
     <div class="asec">
-      <div class="asec-t">Admin PIN</div>
+      <div class="asec-t">Backup &amp; Restore</div>
+      <div class="acard">
+        <div style="font-size:13px;color:var(--tx2);line-height:1.6;margin-bottom:14px">
+          Export your data as a <strong>.json</strong> file and import it on any device to keep everything in sync.
+        </div>
+        <!-- Export -->
+        <button class="btn bp" style="width:100%;justify-content:center;gap:8px;margin-bottom:10px" onclick="exportData()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export Data Backup (.json)
+        </button>
+        <!-- Import -->
+        <label style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:11px 14px;border-radius:var(--rs);background:var(--s3);color:var(--cr);border:1px solid var(--bd2);font-size:13px;font-weight:600;cursor:pointer">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Import Data from Backup
+          <input type="file" accept=".json" id="import-file-input" style="display:none" onchange="importData(event)">
+        </label>
+        <div id="import-result" style="font-size:12px;margin-top:10px;min-height:16px;text-align:center;font-weight:600"></div>
+        <div style="margin-top:14px;padding:10px 12px;background:var(--s2);border-radius:8px;border:1px solid var(--bd)">
+          <div style="font-size:11px;color:var(--tx3);line-height:1.6">
+            <strong style="color:var(--tx2)">How to sync across devices:</strong><br>
+            1. Tap <em>Export</em> on your current device — saves a backup file<br>
+            2. Transfer the file to your other device (email, WhatsApp, USB, etc.)<br>
+            3. Tap <em>Import</em> on the other device and select the file
+          </div>
+        </div>
+      </div>
+    </div>
       <div class="acard">
         <div class="fr">
           <div class="fld" style="flex:1;margin:0"><label>New Admin PIN (4 digits)</label><input type="password" id="new-apin" maxlength="4" inputmode="numeric" placeholder="Enter new PIN"></div>
@@ -1064,69 +1092,166 @@ function changeAPin(){
   setTimeout(()=>msg.textContent='',3000);
 }
 
-window.onload = async () => {
-  showSyncStatus('loading');
-  try {
-    const result = await window.storage.get('chk_av_data');
-    if(result && result.value){
-      const parsed = JSON.parse(result.value);
-      if(parsed.adminPin) S.adminPin = parsed.adminPin;
-      if(parsed.locs && parsed.locs.length) S.locs = parsed.locs;
-      if(parsed.eq) S.eq = parsed.eq;
-    }
-  } catch(e){ console.warn('Could not load from cloud storage:', e); }
-  hideSyncStatus();
-  renderHome();
+// ════════════════════════════════════════
+//  STORAGE — Firebase Realtime Database (primary)
+//           + localStorage (offline fallback)
+//           + Export/Import JSON (manual backup)
+// ════════════════════════════════════════
+const LS_KEY = 'chk_av_v3';
+const FB_PATH = 'inventory';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDozhrvQUz1UNxqvXesKyClGg1jtHjlcLI",
+  authDomain: "chk-av-inventory.firebaseapp.com",
+  databaseURL: "https://chk-av-inventory-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "chk-av-inventory",
+  storageBucket: "chk-av-inventory.firebasestorage.app",
+  messagingSenderId: "475068990968",
+  appId: "1:475068990968:web:226f2e6b98e95794c1420d"
 };
 
+// Init Firebase
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+function getPayload(){ return { adminPin:S.adminPin, locs:S.locs, eq:S.eq }; }
+
+function applyPayload(p){
+  if(p.adminPin) S.adminPin = p.adminPin;
+  if(p.locs && p.locs.length) S.locs = p.locs;
+  if(p.eq) S.eq = p.eq;
+}
+
+// ── Save to localStorage (instant fallback)
+function saveLocal(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(getPayload())); } catch(e){}
+}
+
+// ── Load from localStorage
+function loadLocal(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(raw){ applyPayload(JSON.parse(raw)); return true; }
+  } catch(e){}
+  return false;
+}
+
+// ── Save to Firebase
 async function saveState(){
+  saveLocal();
   showSyncStatus('saving');
-  try {
-    await window.storage.set('chk_av_data', JSON.stringify({
-      adminPin: S.adminPin,
-      locs: S.locs,
-      eq: S.eq
-    }));
+  try{
+    await db.ref(FB_PATH).set(getPayload());
     showSyncStatus('saved');
   } catch(e){
-    console.warn('Could not save to cloud storage:', e);
-    showSyncStatus('error');
+    console.warn('Firebase save failed:', e);
+    showSyncStatus('local');
   }
 }
 
-// ── Sync status indicator ──
+// ── Load from Firebase
+async function loadFromFirebase(){
+  try{
+    const snap = await db.ref(FB_PATH).once('value');
+    const data = snap.val();
+    if(data){ applyPayload(data); saveLocal(); return true; }
+  } catch(e){ console.warn('Firebase load failed:', e); }
+  return false;
+}
+
+// ── Export data as downloadable JSON file
+function exportData(){
+  const payload = getPayload();
+  payload._exported = new Date().toISOString();
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `chk_av_backup_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showSyncStatus('exported');
+}
+
+// ── Import data from a JSON backup file
+function importData(evt){
+  const file = evt.target.files[0];
+  const result = document.getElementById('import-result');
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try{
+      const parsed = JSON.parse(e.target.result);
+      if(!parsed.locs || !parsed.eq){
+        result.style.color='var(--red)';
+        result.textContent='❌ Invalid backup file.';
+        return;
+      }
+      applyPayload(parsed);
+      await saveState();
+      renderHome(); renderAdminDash();
+      result.style.color='var(--grn)';
+      result.textContent='✅ Data imported successfully!';
+      setTimeout(()=> result.textContent='', 4000);
+    } catch(err){
+      result.style.color='var(--red)';
+      result.textContent='❌ Could not read file.';
+    }
+    evt.target.value='';
+  };
+  reader.readAsText(file);
+}
+
+// ── Boot
+window.onload = async () => {
+  showSyncStatus('loading');
+  // Show local data instantly
+  loadLocal();
+  renderHome();
+  // Then load Firebase (newest data)
+  const ok = await loadFromFirebase();
+  if(ok) renderHome();
+  hideSyncStatus();
+};
+
+// ── Real-time listener — auto-update if another device makes changes
+db.ref(FB_PATH).on('value', snap => {
+  const data = snap.val();
+  if(data){
+    applyPayload(data);
+    saveLocal();
+    renderHome();
+  }
+});
+
+// ── Sync status toast
 function showSyncStatus(state){
   let el = document.getElementById('sync-toast');
   if(!el){
     el = document.createElement('div');
     el.id = 'sync-toast';
-    el.style.cssText = 'position:fixed;top:16px;right:16px;z-index:9999;display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:12px;font-size:13px;font-weight:600;font-family:DM Sans,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.15);transition:all .3s ease;pointer-events:none';
+    el.style.cssText = 'position:fixed;top:16px;right:16px;z-index:9999;display:flex;align-items:center;gap:8px;padding:9px 15px;border-radius:12px;font-size:12px;font-weight:600;font-family:DM Sans,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.18);transition:opacity .3s ease;pointer-events:none;opacity:0';
     document.body.appendChild(el);
   }
-  if(state==='loading'){
-    el.style.background='#1e40af'; el.style.color='#fff';
-    el.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Loading data…';
-    el.style.opacity='1';
-  } else if(state==='saving'){
-    el.style.background='#7a1228'; el.style.color='#fff';
-    el.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Saving…';
-    el.style.opacity='1';
-  } else if(state==='saved'){
-    el.style.background='#16a34a'; el.style.color='#fff';
-    el.innerHTML='✅ Saved & synced';
-    el.style.opacity='1';
-    setTimeout(()=>{ el.style.opacity='0'; },2000);
-  } else if(state==='error'){
-    el.style.background='#dc2626'; el.style.color='#fff';
-    el.innerHTML='⚠️ Sync failed';
-    el.style.opacity='1';
-    setTimeout(()=>{ el.style.opacity='0'; },3000);
-  }
+  const spin = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:spin 1s linear infinite;flex-shrink:0"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>';
+  const cfg = {
+    loading:  { bg:'#1e3a8a', text:'#fff', msg:spin+' Loading…', persist:true },
+    saving:   { bg:'#7a1228', text:'#fff', msg:spin+' Saving…',  persist:true },
+    saved:    { bg:'#15803d', text:'#fff', msg:'☁️ Saved to Firebase' },
+    local:    { bg:'#92400e', text:'#fff', msg:'💾 Saved locally (offline)' },
+    exported: { bg:'#1e40af', text:'#fff', msg:'📥 Backup downloaded' },
+    error:    { bg:'#b91c1c', text:'#fff', msg:'⚠️ Save failed' },
+  };
+  const c = cfg[state] || cfg.saved;
+  el.style.background=c.bg; el.style.color=c.text;
+  el.innerHTML=c.msg; el.style.opacity='1';
+  if(!c.persist) setTimeout(()=>{ el.style.opacity='0'; }, 2500);
 }
 function hideSyncStatus(){
   const el=document.getElementById('sync-toast');
   if(el) el.style.opacity='0';
 }
+
 </script>
 </body>
 </html>
