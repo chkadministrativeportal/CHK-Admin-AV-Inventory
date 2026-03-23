@@ -472,9 +472,9 @@ let S = {
       {id:'e54',name:'VGA to HDMI',        model:'',                                        qty:1, status:'available',remarks:''},
       {id:'e55',name:'VGA to HDMI Adaptor',model:'',                                        qty:3, status:'available',remarks:''},
       {id:'e56',name:'HDMI to USB-C',      model:'',                                        qty:1, status:'available',remarks:''},
-      {id:'e57',name:'BT Speaker',         model:'HV25-04477, HV25-04479, Konzert BT',     qty:3, status:'usable',   remarks:'1 Alto speaker defective (HV25-04478)'},
+      {id:'e57',name:'BT Speaker',         model:'HV25-04477, HV25-04479, Konzert BT',     qty:3, status:'available',   remarks:'1 Alto speaker defective (HV25-04478)'},
       {id:'e58',name:'Microphone',         model:'Konzert-2, Wired-1',                      qty:3, status:'available',remarks:''},
-      {id:'e59',name:'TV with Speaker set',model:'',                                        qty:3, status:'usable',   remarks:'1 defective HDMI cable returned'},
+      {id:'e59',name:'TV with Speaker set',model:'',                                        qty:3, status:'available',   remarks:'1 defective HDMI cable returned'},
     ],
     l6:[
       {id:'e61',name:'Projector', model:'Sony-304820',qty:1,status:'available',remarks:''},
@@ -913,7 +913,7 @@ function renderAdminDash(){
     <div class="acard fi">
       <div class="alrow">
         <div class="alemi">${l.emoji}</div>
-        <div class="alinf"><div class="aln">${l.name}</div><div class="alpin">PIN: ${'•'.repeat(l.pin.length)}</div></div>
+        <div class="alinf"><div class="aln">${l.name}</div><div class="alpin">PIN: ${l.pin}</div></div>
         <div class="alact">
           <div class="ico-btn" onclick="openEditLoc('${l.id}')"><svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></div>
           <div class="ico-btn del-btn" onclick="delLoc('${l.id}')"><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg></div>
