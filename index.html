@@ -477,6 +477,7 @@ body{min-height:100vh;overflow-x:hidden}
       <div class="fld" style="flex:1.5"><label>Status</label>
         <select id="eq-st">
           <option value="available">✅ Available</option>
+          <option value="inuse">🔵 In Use</option>
           <option value="defective">❌ Defective</option>
         </select>
       </div>
@@ -589,9 +590,9 @@ let S = {
 
 const EE={'Projector':'📽️','HDMI':'🔌','VGA':'🔌','BT Speaker':'🔊','Microphone':'🎤','TV':'📺','Mic':'🎤'};
 function gee(n){ for(const k of Object.keys(EE)) if(n.toLowerCase().includes(k.toLowerCase())) return EE[k]; return '📦'; }
-const SL={available:'Available',usable:'Usable',defective:'Defective'};
-const SC={available:'sa',usable:'su',defective:'sd'};
-const SE={available:'✅',usable:'⚠️',defective:'❌'};
+const SL={available:'Available',inuse:'In Use',usable:'Usable',defective:'Defective'};
+const SC={available:'sa',inuse:'su',usable:'su',defective:'sd'};
+const SE={available:'✅',inuse:'🔵',usable:'⚠️',defective:'❌'};
 
 let curLoc=null, unlocked=new Set();
 
@@ -921,7 +922,7 @@ function generatePDF(){
             doc.setTextColor(...cr); doc.setFont('helvetica','bold');
             doc.text(String(e.qty),margin+133,y+5);
             // Status badge
-            const sc=e.status==='available'?grn:e.status==='usable'?amb:red;
+            const sc=e.status==='available'?grn:e.status==='inuse'?[37,99,235]:e.status==='usable'?amb:red;
             doc.setFillColor(...sc);
             doc.roundedRect(margin+143,y+1,22,5,1,1,'F');
             doc.setTextColor(255,255,255); doc.setFontSize(7);
