@@ -528,15 +528,15 @@ let S = {
   adminPin:'0000',
   auditDate:'November 28, 2025',
   locs:[
-    {id:'l1',name:'Track Oval',  emoji:'🏟️',pin:'1111'},
-    {id:'l2',name:'Tennis Court',emoji:'🎾', pin:'2222'},
-    {id:'l3',name:'New Gym',     emoji:'🏋️',pin:'3333'},
-    {id:'l4',name:'Ylanan Gym',  emoji:'🏀', pin:'4444'},
-    {id:'l5',name:'VTC',         emoji:'🏫', pin:'5555'},
-    {id:'l6',name:'SUB',         emoji:'🏢', pin:'6666'},
-    {id:'l7',name:'AIT',         emoji:'💻', pin:'7777'},
-    {id:'l8',name:'Solaire',     emoji:'🌟', pin:'8888'},
-    {id:'l9',name:'DMST',        emoji:'🎓', pin:'9999'},
+    {id:'l1',name:'Track Oval',  emoji:'🏟️',pin:'1111',lastUpdated:null},
+    {id:'l2',name:'Tennis Court',emoji:'🎾', pin:'2222',lastUpdated:null},
+    {id:'l3',name:'New Gym',     emoji:'🏋️',pin:'3333',lastUpdated:null},
+    {id:'l4',name:'Ylanan Gym',  emoji:'🏀', pin:'4444',lastUpdated:null},
+    {id:'l5',name:'VTC',         emoji:'🏫', pin:'5555',lastUpdated:null},
+    {id:'l6',name:'SUB',         emoji:'🏢', pin:'6666',lastUpdated:null},
+    {id:'l7',name:'AIT',         emoji:'💻', pin:'7777',lastUpdated:null},
+    {id:'l8',name:'Solaire',     emoji:'🌟', pin:'8888',lastUpdated:null},
+    {id:'l9',name:'DMST',        emoji:'🎓', pin:'9999',lastUpdated:null},
   ],
   eq:{
     l1:[
@@ -596,6 +596,27 @@ const SE={available:'✅',inuse:'🔵',usable:'⚠️',defective:'❌'};
 
 let curLoc=null, unlocked=new Set();
 
+// ════════════════ LAST UPDATED HELPERS ════════════════
+function stampLocUpdated(lid){
+  const loc = S.locs.find(l=>l.id===lid);
+  if(loc) loc.lastUpdated = new Date().toISOString();
+}
+function fmtLastUpdated(iso){
+  if(!iso) return null;
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffMin = Math.floor(diffMs/60000);
+  const diffHr  = Math.floor(diffMs/3600000);
+  const diffDay = Math.floor(diffMs/86400000);
+  if(diffMin < 1)  return 'just now';
+  if(diffMin < 60) return `${diffMin}m ago`;
+  if(diffHr  < 24) return `${diffHr}h ago`;
+  if(diffDay < 2)  return 'yesterday';
+  // Show date for older entries
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year: d.getFullYear()!==now.getFullYear()?'numeric':undefined});
+}
+
 // ════════════════ NAV ════════════════
 function showSc(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById('s-'+id).classList.add('active'); window.scrollTo(0,0); }
 function setNav(n){
@@ -653,11 +674,13 @@ function renderLocs(){
     const eq=S.eq[l.id]||[];
     const cnt=eq.reduce((s,e)=>s+e.qty,0);
     const isAdmin=unlocked.has(l.id);
+    const updStr = fmtLastUpdated(l.lastUpdated);
     return `<div class="lc fi" style="animation-delay:${i*.04}s;border-left:4px solid ${isAdmin?'var(--cr)':'var(--bd)'}" onclick="locClick('${l.id}')">
       <div class="le">${l.emoji}</div>
       <div class="li">
         <div class="ln">${l.name}</div>
         <div class="ls">${eq.length} equipment type${eq.length!==1?'s':''} · ${isAdmin?'<span style="color:var(--cr);font-weight:700">Admin</span>':'View Only'}</div>
+        ${updStr ? `<div style="display:inline-flex;align-items:center;gap:3px;margin-top:4px;font-size:10px;font-weight:600;color:#fff;background:var(--cr);padding:2px 7px;border-radius:20px;opacity:.85"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Updated ${updStr}</div>` : ''}
       </div>
       <div style="text-align:right;flex-shrink:0">
         <div class="lcount">${cnt}</div>
@@ -773,13 +796,14 @@ function saveEq(){
   if(!S.eq[curLoc]) S.eq[curLoc]=[];
   if(eid){ const idx=S.eq[curLoc].findIndex(x=>x.id===eid); if(idx>-1) S.eq[curLoc][idx]=entry; }
   else S.eq[curLoc].push(entry);
+  stampLocUpdated(curLoc);
   closeOv('ov-eq'); saveState(); renderDetStats(); renderEqList(); renderHome();
 }
 function deleteEq(eid){
   const e=(S.eq[curLoc]||[]).find(x=>x.id===eid); if(!e) return;
   document.getElementById('del-t').textContent='Delete Equipment';
   document.getElementById('del-m').textContent=`Remove "${e.name}"? This cannot be undone.`;
-  document.getElementById('del-ok').onclick=()=>{ S.eq[curLoc]=S.eq[curLoc].filter(x=>x.id!==eid); closeOv('ov-del'); saveState(); renderDetStats(); renderEqList(); renderHome(); };
+  document.getElementById('del-ok').onclick=()=>{ S.eq[curLoc]=S.eq[curLoc].filter(x=>x.id!==eid); stampLocUpdated(curLoc); closeOv('ov-del'); saveState(); renderDetStats(); renderEqList(); renderHome(); };
   openOv('ov-del');
 }
 
@@ -990,7 +1014,7 @@ function addLoc(){
   const err=document.getElementById('add-loc-err');
   if(!name){ err.textContent='Location name required'; return; }
   if(!/^\d{4}$/.test(pin)){ err.textContent='PIN must be exactly 4 digits'; return; }
-  const nl={id:'l_'+Date.now(),name,emoji,pin};
+  const nl={id:'l_'+Date.now(),name,emoji,pin,lastUpdated:null};
   S.locs.push(nl); S.eq[nl.id]=[];
   document.getElementById('nl-nm').value='';
   document.getElementById('nl-pin').value='';
@@ -1015,6 +1039,7 @@ function saveLocEdit(){
   if(!name){ alert('Name cannot be empty'); return; }
   if(np&&!/^\d{4}$/.test(np)){ alert('PIN must be exactly 4 digits'); return; }
   l.name=name; l.emoji=emoji; if(np) l.pin=np;
+  stampLocUpdated(lid);
   closeOv('ov-eloc'); saveState(); renderAdminDash(); renderHome();
 }
 function delLoc(lid){
