@@ -865,40 +865,7 @@ function generatePDF(){
       doc.text('Audio-Visual Equipment Tracker',margin,26);
       const now=new Date();
       doc.text(`Generated: ${now.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}`,margin,33);
-      doc.text(`Last audit: ${S.auditDate}`,W-margin,33,{align:'right'});
       y=50;
-
-      // ── OVERVIEW STATS
-      doc.setFillColor(253,240,242);
-      doc.roundedRect(margin,y,W-2*margin,28,3,3,'F');
-      const d=getReportData();
-      const cols=[
-        {label:'Locations',val:S.locs.length},
-        {label:'Total Items',val:d.totalQty},
-        {label:'Equipment Types',val:d.typeCount},
-        {label:'Defective',val:d.totalDefect},
-      ];
-      const cw=(W-2*margin)/4;
-      cols.forEach((c,i)=>{
-        const cx=margin+cw*i+cw/2;
-        doc.setTextColor(...cr); doc.setFontSize(18); doc.setFont('helvetica','bold');
-        doc.text(String(c.val),cx,y+13,{align:'center'});
-        doc.setTextColor(...tx3); doc.setFontSize(7); doc.setFont('helvetica','normal');
-        doc.text(c.label.toUpperCase(),cx,y+21,{align:'center'});
-      });
-      y+=36;
-
-      // ── STATUS ROW
-      doc.setFontSize(9); doc.setFont('helvetica','bold');
-      [[grn,'Available',d.totalAvail],[amb,'Usable',d.totalUsable],[red,'Defective',d.totalDefect]].forEach((s,i)=>{
-        const bx=margin+i*60; const by=y;
-        doc.setFillColor(s[0][0],s[0][1],s[0][2],0.1);
-        doc.setFillColor(s[0][0],s[0][1],s[0][2]);
-        doc.setTextColor(255,255,255);
-        doc.roundedRect(bx,by,55,10,2,2,'F');
-        doc.text(`${s[1]}: ${s[2]}`,bx+4,by+6.5);
-      });
-      y+=18;
 
       // ── DIVIDER
       doc.setDrawColor(...cr); doc.setLineWidth(0.3);
