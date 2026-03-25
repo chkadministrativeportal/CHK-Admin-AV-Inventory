@@ -900,12 +900,60 @@ function generatePDF(){
       doc.setTextColor(...cr); doc.setFontSize(13); doc.setFont('helvetica','bold');
       doc.text('Equipment by Location',margin,y); y+=8;
 
+      // Helper: split text into lines that fit within maxWidth at given fontSize
+      function splitLines(doc, text, maxWidth, fontSize){
+        doc.setFontSize(fontSize);
+        return doc.splitTextToSize(text, maxWidth);
+      }
+
+      // Helper: draw the table header row (used after page breaks inside a location)
+      function drawTableHeader(doc, y, margin, W, tx2){
+        doc.setFillColor(248,232,236);
+        doc.rect(margin,y,W-2*margin,7,'F');
+        doc.setTextColor(...tx2); doc.setFontSize(8); doc.setFont('helvetica','bold');
+        doc.text('Equipment',margin+3,y+5);
+        doc.text('Model/Serial',margin+58,y+5);
+        doc.text('Qty',margin+138,y+5);
+        doc.text('Status',margin+150,y+5);
+        return y+9;
+      }
+
       S.locs.forEach(l=>{
         const eq=S.eq[l.id]||[];
         const tot=eq.reduce((s,e)=>s+e.qty,0);
 
-        // check page break
-        if(y>270){ doc.addPage(); y=margin; }
+        // ── Pre-calculate the height needed for this entire location block ──
+        // so we can decide whether to start a fresh page
+        function calcLocHeight(){
+          let h = 13; // location header
+          if(!eq.length){
+            h += 8;
+          } else {
+            h += 9; // table header
+            eq.forEach(e=>{
+              // model lines
+              doc.setFontSize(7.5); doc.setFont('helvetica','normal');
+              const mdLines = splitLines(doc, e.model||'—', 72, 7.5);
+              const rowH = Math.max(7, mdLines.length * 4.5 + 2);
+              h += rowH;
+              if(e.remarks){
+                doc.setFontSize(7); doc.setFont('helvetica','italic');
+                const rmkLines = splitLines(doc, 'Remarks: '+e.remarks, W-2*margin-6, 7);
+                h += Math.max(6, rmkLines.length * 4 + 2);
+              }
+            });
+          }
+          h += 6; // bottom gap
+          return h;
+        }
+
+        const locH = calcLocHeight();
+        const pageH = 287 - margin; // usable height
+
+        // If location doesn't fit on remaining page AND it's not at the top already, new page
+        if(y > margin + 20 && y + locH > pageH){
+          doc.addPage(); y = margin;
+        }
 
         // Location header
         doc.setFillColor(...cr);
@@ -920,49 +968,62 @@ function generatePDF(){
           doc.text('No equipment recorded',margin+4,y); y+=8;
         } else {
           // Table header
-          doc.setFillColor(248,232,236);
-          doc.rect(margin,y,W-2*margin,7,'F');
-          doc.setTextColor(...tx2); doc.setFontSize(8); doc.setFont('helvetica','bold');
-          doc.text('Equipment',margin+3,y+5);
-          doc.text('Model/Serial',margin+60,y+5);
-          doc.text('Qty',margin+130,y+5);
-          doc.text('Status',margin+145,y+5);
-          y+=9;
+          y = drawTableHeader(doc, y, margin, W, tx2);
+
+          // Column layout: Equipment=margin+3..58, Model=58..136, Qty=138, Status=150
+          const modelColX = margin+58;
+          const modelColW = 72; // width available for model text
+          const statusColX = margin+148;
 
           eq.forEach((e,ei)=>{
-            if(y>275){ doc.addPage(); y=margin; }
+            // Calculate how many lines the model needs
+            doc.setFontSize(7.5); doc.setFont('helvetica','normal');
+            const mdLines = splitLines(doc, e.model||'—', modelColW, 7.5);
+            const rowH = Math.max(7, mdLines.length * 4.5 + 2);
+
+            // Page break check — if row won't fit, new page + re-draw table header
+            if(y + rowH > pageH){
+              doc.addPage(); y = margin;
+              y = drawTableHeader(doc, y, margin, W, tx2);
+            }
+
             const rowBg=ei%2===0?[255,255,255]:[252,246,248];
             doc.setFillColor(...rowBg);
-            doc.rect(margin,y,W-2*margin,7,'F');
+            doc.rect(margin,y,W-2*margin,rowH,'F');
+
+            // Equipment name (wrap if needed, max 2 lines)
             doc.setTextColor(...txDark); doc.setFontSize(8); doc.setFont('helvetica','normal');
-            // Name
-            const nm=e.name.length>25?e.name.slice(0,23)+'…':e.name;
-            doc.text(nm,margin+3,y+5);
-            // Model
-            const md=(e.model||'—').length>28?(e.model||'—').slice(0,26)+'…':(e.model||'—');
-            doc.setTextColor(...tx2);
-            doc.text(md,margin+60,y+5);
-            // Qty
-            doc.setTextColor(...cr); doc.setFont('helvetica','bold');
-            doc.text(String(e.qty),margin+133,y+5);
-            // Status badge
+            const nmLines = splitLines(doc, e.name, 52, 8);
+            nmLines.slice(0,2).forEach((ln,li)=> doc.text(ln, margin+3, y + 4.5 + li*4.5));
+
+            // Model/Serial — full text, wrapped
+            doc.setTextColor(...tx2); doc.setFontSize(7.5); doc.setFont('helvetica','normal');
+            mdLines.forEach((ln,li)=> doc.text(ln, modelColX, y + 4.5 + li*4.5));
+
+            // Qty — vertically centered
+            doc.setTextColor(...cr); doc.setFont('helvetica','bold'); doc.setFontSize(8);
+            doc.text(String(e.qty), margin+140, y + rowH/2 + 1.5, {align:'center'});
+
+            // Status badge — vertically centered
             const sc=e.status==='available'?grn:e.status==='inuse'?[37,99,235]:e.status==='usable'?amb:red;
             doc.setFillColor(...sc);
-            doc.roundedRect(margin+143,y+1,22,5,1,1,'F');
-            doc.setTextColor(255,255,255); doc.setFontSize(7);
-            doc.text(SL[e.status],margin+154,y+4.8,{align:'center'});
-            y+=7;
+            doc.roundedRect(statusColX, y + rowH/2 - 3, 24, 5.5, 1.2, 1.2,'F');
+            doc.setTextColor(255,255,255); doc.setFontSize(7); doc.setFont('helvetica','bold');
+            doc.text(SL[e.status], statusColX+12, y + rowH/2 + 1.2, {align:'center'});
+
+            y += rowH;
 
             // Remarks
             if(e.remarks){
-              if(y>275){ doc.addPage(); y=margin; }
+              doc.setFontSize(7); doc.setFont('helvetica','italic');
+              const rmkLines = splitLines(doc, 'Remarks: '+e.remarks, W-2*margin-6, 7);
+              const rmkH = Math.max(6, rmkLines.length * 4 + 2);
+              if(y + rmkH > pageH){ doc.addPage(); y = margin; }
               doc.setFillColor(255,251,235);
-              doc.rect(margin,y,W-2*margin,6,'F');
-              doc.setTextColor(146,64,14); doc.setFontSize(7); doc.setFont('helvetica','italic');
-              const rmk=`Remarks: ${e.remarks}`;
-              const rmkTxt=rmk.length>85?rmk.slice(0,83)+'…':rmk;
-              doc.text(rmkTxt,margin+3,y+4.2);
-              y+=6;
+              doc.rect(margin,y,W-2*margin,rmkH,'F');
+              doc.setTextColor(146,64,14);
+              rmkLines.forEach((ln,li)=> doc.text(ln, margin+3, y + 4 + li*4));
+              y += rmkH;
             }
           });
         }
