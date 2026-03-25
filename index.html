@@ -177,9 +177,23 @@ body{min-height:100vh;overflow-x:hidden}
 
 /* REPORTS PAGE */
 .rep-summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
-.rep-stat-card{background:#fff;border-radius:var(--rm);padding:16px;border:1px solid var(--bd);box-shadow:var(--sh);text-align:center}
+.rep-stat-card{background:#fff;border-radius:var(--rm);padding:16px;border:1px solid var(--bd);box-shadow:var(--sh);text-align:center;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.rep-stat-card:hover{transform:translateY(-2px);box-shadow:0 4px 14px rgba(122,18,40,.15);border-color:var(--bd2)}
+.rep-stat-card:active{transform:scale(.97)}
+.rep-stat-card::after{content:'›';position:absolute;bottom:8px;right:12px;font-size:16px;color:var(--bd2);font-weight:700}
 .rep-stat-num{font-size:28px;font-weight:700;letter-spacing:-1px;line-height:1}
 .rep-stat-lbl{font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:.8px;font-weight:600;margin-top:4px}
+/* Summary Detail Modal */
+.sum-modal-title{font-size:17px;font-weight:700;margin-bottom:4px;letter-spacing:-.3px}
+.sum-modal-sub{font-size:12px;color:var(--tx3);margin-bottom:16px}
+.sum-loc-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--bd)}
+.sum-loc-row:last-child{border-bottom:none}
+.sum-loc-emoji{font-size:20px;width:36px;text-align:center;flex-shrink:0}
+.sum-loc-info{flex:1;min-width:0}
+.sum-loc-name{font-size:14px;font-weight:700}
+.sum-eq-list{font-size:11px;color:var(--tx2);margin-top:3px;line-height:1.5}
+.sum-loc-count{font-size:20px;font-weight:700;flex-shrink:0}
+.sum-empty{text-align:center;padding:24px;color:var(--tx3);font-size:14px}
 .rep-loc-card{background:#fff;border-radius:var(--rm);padding:14px 16px;margin-bottom:10px;border:1px solid var(--bd);box-shadow:var(--sh)}
 .rep-loc-top{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .rep-loc-emoji{width:40px;height:40px;background:var(--s2);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
@@ -506,6 +520,16 @@ body{min-height:100vh;overflow-x:hidden}
     </div>
   </div>
 </div>
+<!-- Summary Detail Modal -->
+<div class="ov" id="ov-sum">
+  <div class="modal">
+    <div class="mhandle"></div>
+    <div class="sum-modal-title" id="sum-modal-title">Detail</div>
+    <div class="sum-modal-sub" id="sum-modal-sub"></div>
+    <div id="sum-modal-body"></div>
+    <div style="margin-top:16px"><button class="btn bg" style="width:100%;justify-content:center;padding:12px" onclick="closeOv('ov-sum')">Close</button></div>
+  </div>
+</div>
 <!-- Confirm Delete -->
 <div class="ov" id="ov-del">
   <div class="modal">
@@ -828,12 +852,11 @@ function renderReports(){
 
   const d=getReportData();
 
-  // Overview grid
+  // Overview grid — no Total Items card
   document.getElementById('rep-overview').innerHTML=`
-    <div class="rep-stat-card"><div class="rep-stat-num" style="color:var(--cr)">${S.locs.length}</div><div class="rep-stat-lbl">Locations</div></div>
-    <div class="rep-stat-card"><div class="rep-stat-num" style="color:var(--cr)">${d.totalQty}</div><div class="rep-stat-lbl">Total Items</div></div>
-    <div class="rep-stat-card"><div class="rep-stat-num" style="color:var(--cr)">${d.typeCount}</div><div class="rep-stat-lbl">Equipment Types</div></div>
-    <div class="rep-stat-card"><div class="rep-stat-num" style="color:var(--red)">${d.totalDefect}</div><div class="rep-stat-lbl">Defective Items</div></div>
+    <div class="rep-stat-card" onclick="showSumDetail('locations')"><div class="rep-stat-num" style="color:var(--cr)">${S.locs.length}</div><div class="rep-stat-lbl">Locations</div></div>
+    <div class="rep-stat-card" onclick="showSumDetail('types')"><div class="rep-stat-num" style="color:var(--cr)">${d.typeCount}</div><div class="rep-stat-lbl">Equipment Types</div></div>
+    <div class="rep-stat-card" onclick="showSumDetail('defective')"><div class="rep-stat-num" style="color:var(--red)">${d.totalDefect}</div><div class="rep-stat-lbl">Defective Items</div></div>
   `;
 
   // Per-location
@@ -862,6 +885,98 @@ function renderReports(){
       ${eq.length?rows:`<div style="font-size:13px;color:var(--tx3);padding:4px 0">No equipment recorded</div>`}
     </div>`;
   }).join('');
+}
+
+// ════════════════ SUMMARY DETAIL MODALS ════════════════
+function showSumDetail(type){
+  let title='', sub='', body='';
+
+  if(type==='locations'){
+    title='📍 All Locations';
+    sub=`${S.locs.length} location${S.locs.length!==1?'s':''} tracked`;
+    const rows=S.locs.map(l=>{
+      const eq=S.eq[l.id]||[];
+      const tot=eq.reduce((s,e)=>s+e.qty,0);
+      const avail=eq.filter(e=>e.status==='available').reduce((s,e)=>s+e.qty,0);
+      const inuse=eq.filter(e=>e.status==='inuse').reduce((s,e)=>s+e.qty,0);
+      const def=eq.filter(e=>e.status==='defective').reduce((s,e)=>s+e.qty,0);
+      const badges=[];
+      if(avail) badges.push(`<span style="color:var(--grn);font-weight:700">${avail} available</span>`);
+      if(inuse) badges.push(`<span style="color:var(--amb);font-weight:700">${inuse} in use</span>`);
+      if(def) badges.push(`<span style="color:var(--red);font-weight:700">${def} defective</span>`);
+      return `<div class="sum-loc-row">
+        <div class="sum-loc-emoji">${l.emoji}</div>
+        <div class="sum-loc-info">
+          <div class="sum-loc-name">${l.name}</div>
+          <div class="sum-eq-list">${badges.length?badges.join(' · '):'<span style="color:var(--tx3)">No equipment</span>'}</div>
+        </div>
+        <div class="sum-loc-count" style="color:var(--cr)">${tot}<div style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;font-weight:600;text-align:right">items</div></div>
+      </div>`;
+    }).join('');
+    body=rows||`<div class="sum-empty">No locations found</div>`;
+
+  } else if(type==='types'){
+    title='🔧 Equipment Types';
+    // Collect unique equipment names across all locations
+    const typeMap={};
+    S.locs.forEach(l=>{
+      (S.eq[l.id]||[]).forEach(e=>{
+        if(!typeMap[e.name]) typeMap[e.name]={name:e.name,locs:[],avail:0,inuse:0,def:0,total:0};
+        typeMap[e.name].locs.push(l.name);
+        typeMap[e.name].total+=e.qty;
+        if(e.status==='available') typeMap[e.name].avail+=e.qty;
+        else if(e.status==='inuse') typeMap[e.name].inuse+=e.qty;
+        else if(e.status==='defective') typeMap[e.name].def+=e.qty;
+      });
+    });
+    const types=Object.values(typeMap).sort((a,b)=>b.total-a.total);
+    sub=`${types.length} unique equipment type${types.length!==1?'s':''}`;
+    const rows=types.map(t=>{
+      const badges=[];
+      if(t.avail) badges.push(`<span style="color:var(--grn);font-weight:700">${t.avail} available</span>`);
+      if(t.inuse) badges.push(`<span style="color:var(--amb);font-weight:700">${t.inuse} in use</span>`);
+      if(t.def) badges.push(`<span style="color:var(--red);font-weight:700">${t.def} defective</span>`);
+      const locList=[...new Set(t.locs)].join(', ');
+      return `<div class="sum-loc-row">
+        <div class="sum-loc-emoji">${gee(t.name)}</div>
+        <div class="sum-loc-info">
+          <div class="sum-loc-name">${t.name}</div>
+          <div class="sum-eq-list">${badges.length?badges.join(' · '):'—'}</div>
+          <div style="font-size:10px;color:var(--tx3);margin-top:2px">📍 ${locList}</div>
+        </div>
+        <div class="sum-loc-count" style="color:var(--cr)">${t.total}<div style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;font-weight:600;text-align:right">pcs</div></div>
+      </div>`;
+    }).join('');
+    body=rows||`<div class="sum-empty">No equipment types found</div>`;
+
+  } else if(type==='defective'){
+    title='❌ Defective Items';
+    const defItems=[];
+    S.locs.forEach(l=>{
+      (S.eq[l.id]||[]).filter(e=>e.status==='defective').forEach(e=>{
+        defItems.push({...e,locName:l.name,locEmoji:l.emoji});
+      });
+    });
+    sub=`${defItems.reduce((s,e)=>s+e.qty,0)} defective item${defItems.reduce((s,e)=>s+e.qty,0)!==1?'s':''} across ${[...new Set(defItems.map(e=>e.locName))].length} location${[...new Set(defItems.map(e=>e.locName))].length!==1?'s':''}`;
+    if(!defItems.length){
+      body=`<div class="sum-empty">✅ No defective items found!</div>`;
+    } else {
+      const rows=defItems.map(e=>`<div class="sum-loc-row">
+        <div class="sum-loc-emoji">${gee(e.name)}</div>
+        <div class="sum-loc-info">
+          <div class="sum-loc-name">${e.name}${e.model?` <span style="font-size:11px;color:var(--tx3);font-weight:400">(${e.model})</span>`:''}</div>
+          <div class="sum-eq-list">📍 ${e.locEmoji} ${e.locName}${e.remarks?` · 📝 ${e.remarks}`:''}</div>
+        </div>
+        <div class="sum-loc-count" style="color:var(--red)">${e.qty}<div style="font-size:9px;color:var(--tx3);text-transform:uppercase;letter-spacing:.5px;font-weight:600;text-align:right">pcs</div></div>
+      </div>`).join('');
+      body=rows;
+    }
+  }
+
+  document.getElementById('sum-modal-title').textContent=title;
+  document.getElementById('sum-modal-sub').textContent=sub;
+  document.getElementById('sum-modal-body').innerHTML=body;
+  openOv('ov-sum');
 }
 
 // ════════════════ PDF GENERATION ════════════════
