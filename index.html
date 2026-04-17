@@ -131,10 +131,10 @@ body{min-height:100vh;overflow-x:hidden}
 .lc:active{transform:scale(.98)}
 .le{width:48px;height:48px;background:var(--s2);border-radius:var(--rs);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
 .li{flex:1;min-width:0}
-.ln{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ls{font-size:12px;color:var(--tx3);margin-top:2px}
+.ln{font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--tx);letter-spacing:-.3px}
+.ls{font-size:12px;color:var(--tx2);margin-top:2px;font-weight:500}
 .lcount{font-size:24px;font-weight:700;color:var(--cr);letter-spacing:-1px;line-height:1}
-.lcount-l{font-size:10px;color:var(--tx3);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+.lcount-l{font-size:10px;color:var(--tx2);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
 .lchev svg{width:16px;height:16px;stroke:var(--tx3);fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
 
 /* DETAIL */
@@ -563,6 +563,25 @@ body{min-height:100vh;overflow-x:hidden}
   </div>
 </div>
 
+<!-- Edit Personnel / Contact for Borrowing -->
+<div class="ov" id="ov-ep">
+  <div class="modal">
+    <div class="mhandle"></div>
+    <div class="mtitle">Edit Contact for Borrowing</div>
+    <div class="msub" id="ep-title"></div>
+    <input type="hidden" id="ep-lid">
+    <input type="hidden" id="ep-lname">
+    <div class="fld">
+      <label>Personnel Names <span style="font-weight:400;color:var(--tx3)">(one per line)</span></label>
+      <textarea id="ep-names" style="min-height:120px" placeholder="e.g.&#10;Ate Sharon&#10;Kuya Edward"></textarea>
+    </div>
+    <div class="mact">
+      <button class="btn bg" onclick="closeOv('ov-ep')">Cancel</button>
+      <button class="btn bp" onclick="savePersonnel()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Confirm Delete -->
 <div class="ov" id="ov-del">
   <div class="modal">
@@ -584,6 +603,15 @@ body{min-height:100vh;overflow-x:hidden}
 let S = {
   adminPin:'0000',
   auditDate:'November 28, 2025',
+  personnel:{
+    'Track Oval':   ['Ate Sharon','Ate Joy','Kuya Edward','Kuya Santoy'],
+    'Tennis Court': ['Kuya Richard','Ate Rina','Sir Jhong'],
+    'Ylanan Gym':   ['Ate Jenneth','Kuya Onyok','Kuya Christian'],
+    'VTC':          ['Ate Lyn','Kuya Jhayr','Ate Anggie','Kuya Toto','Admin'],
+    'AIT':          ['Kuya Onyok'],
+    'Solaire':      ['Ate Rachel'],
+    'New Gym':      ['Kuya Drigo','Kuya Shulan'],
+  },
   locs:[
     {id:'l1',name:'Track Oval',  emoji:'🏟️',pin:'1111',lastUpdated:null},
     {id:'l2',name:'Tennis Court',emoji:'🎾', pin:'2222',lastUpdated:null},
@@ -736,16 +764,32 @@ function renderLocs(){
     const extra = eq.length-3;
     const extraPill = extra>0?`<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;background:var(--s2);color:var(--tx3);border:1px solid var(--bd);white-space:nowrap">+${extra} more</span>`:'';
     const personnel = getPersonnel(l.name);
-    const personnelRow = personnel && personnel.length ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bd)">
-      <div style="display:flex;align-items:center;gap:5px;margin-bottom:6px">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="var(--tx3)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--tx3)">Contact for Borrowing</span>
+    const personnelRow = personnel && personnel.length ? `<div style="margin-top:10px;border-radius:10px;overflow:hidden;background:#14532d${isAdmin?';cursor:pointer':''}" ${isAdmin?`onclick="event.stopPropagation();openEditPersonnel('${l.id}','${l.name}')"`:''}>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px 5px">
+        <div style="display:flex;align-items:center;gap:5px">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,.85)">Contact for Borrowing</span>
+        </div>
+        ${isAdmin ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.6)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>` : ''}
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:4px">
-        ${personnel.map(p=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:20px;font-size:10px;font-weight:600;background:rgba(232,71,95,.08);color:var(--cr);border:1px solid rgba(232,71,95,.2);white-space:nowrap"><svg width='9' height='9' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='8' r='4'/><path d='M4 20c0-4 3.6-7 8-7s8 3 8 7'/></svg>${p}</span>`).join('')}
+      <div style="display:flex;flex-wrap:wrap;gap:4px;padding:0 10px 8px">
+        ${personnel.map(p=>`<span style="display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:20px;font-size:10.5px;font-weight:700;background:rgba(255,255,255,.15);color:#fff;white-space:nowrap"><svg width='9' height='9' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='8' r='4'/><path d='M4 20c0-4 3.6-7 8-7s8 3 8 7'/></svg>${p}</span>`).join('')}
       </div>
-      <div style="margin-top:5px;font-size:10px;color:var(--tx3);font-style:italic">Approach any of these personnel to borrow AV equipment.</div>
-    </div>` : '';
+    </div>` : (isAdmin ? `<div style="margin-top:10px;border-radius:10px;overflow:hidden;background:#14532d;cursor:pointer" onclick="event.stopPropagation();openEditPersonnel('${l.id}','${l.name}')">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 10px">
+        <div style="display:flex;align-items:center;gap:5px">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,.85)">Contact for Borrowing</span>
+        </div>
+        <span style="font-size:10px;color:rgba(255,255,255,.6);font-style:italic">Tap to add personnel</span>
+      </div>
+    </div>` : `<div style="margin-top:10px;border-radius:10px;overflow:hidden;background:#14532d">
+      <div style="display:flex;align-items:center;gap:5px;padding:7px 10px">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.85)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:rgba(255,255,255,.85)">Contact for Borrowing</span>
+        <span style="font-size:10px;color:rgba(255,255,255,.5);font-style:italic;margin-left:4px">— no personnel set</span>
+      </div>
+    </div>`);
     return `<div class="lc fi" style="animation-delay:${i*.04}s;border-left:4px solid ${isAdmin?'var(--cr)':'var(--bd)'};align-items:flex-start" onclick="locClick('${l.id}')">
       <div class="le" style="margin-top:2px">${l.emoji}</div>
       <div class="li">
@@ -765,33 +809,59 @@ function locClick(lid){
 }
 
 // ════════════════ PERSONNEL DATA ════════════════
-const PERSONNEL = {
-  'Track Oval':     ['Ate Sharon','Ate Joy','Kuya Edward','Kuya Santoy'],
-  'Tennis Court':   ['Kuya Richard','Ate Rina','Sir Jhong'],
-  'Ylanan Gym':     ['Ate Jenneth','Kuya Onyok','Kuya Christian'],
-  'VTC':            ['Ate Lyn','Kuya Jhayr','Ate Anggie','Kuya Toto','Admin'],
-  'AIT':            ['Kuya Onyok'],
-  'Solaire':        ['Ate Rachel'],
-  'New Gym':        ['Kuya Drigo','Kuya Shulan'],
-};
 function getPersonnel(locName){
-  // Match by partial name (case-insensitive)
-  for(const key of Object.keys(PERSONNEL)){
+  if(S.personnel[locName]) return S.personnel[locName];
+  for(const key of Object.keys(S.personnel)){
     if(locName.toLowerCase().includes(key.toLowerCase()) || key.toLowerCase().includes(locName.toLowerCase())){
-      return PERSONNEL[key];
+      return S.personnel[key];
     }
   }
-  return null;
+  return [];
 }
-function renderPersonnelCard(locName){
+function openEditPersonnel(lid, locName){
   const people = getPersonnel(locName);
-  if(!people || people.length===0) return '';
+  document.getElementById('ep-lid').value = lid;
+  document.getElementById('ep-lname').value = locName;
+  document.getElementById('ep-title').textContent = locName;
+  document.getElementById('ep-names').value = people.join('\n');
+  openOv('ov-ep');
+}
+function savePersonnel(){
+  const locName = document.getElementById('ep-lname').value;
+  const raw = document.getElementById('ep-names').value;
+  const people = raw.split('\n').map(s=>s.trim()).filter(Boolean);
+  S.personnel[locName] = people;
+  closeOv('ov-ep');
+  saveState();
+  renderLocs();
+}
+function renderPersonnelCard(locName, adminMode){
+  const people = getPersonnel(locName);
+  const lid = (S.locs.find(x=>x.name===locName)||{}).id || '';
+  if(!people || people.length===0){
+    if(!adminMode) return '';
+    // Admin sees an empty state with add button
+    return `
+    <div style="margin:12px 16px 0;background:#fff;border-radius:var(--rm);padding:14px 16px;box-shadow:var(--sh);border:1px solid var(--bd)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='var(--cr)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--tx3)">Contact for Borrowing</div>
+        </div>
+        <button onclick="openEditPersonnel('${lid}','${locName}')" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;background:var(--accs);color:var(--cr);border:1px solid rgba(232,71,95,.25);cursor:pointer;font-family:inherit"><svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7'/><path d='M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z'/></svg>Edit</button>
+      </div>
+      <div style="font-size:12px;color:var(--tx3);font-style:italic">No personnel set yet. Tap Edit to add.</div>
+    </div>`;
+  }
   const pills = people.map(p=>`<span style="display:inline-flex;align-items:center;gap:4px;padding:5px 11px;border-radius:20px;font-size:12px;font-weight:600;background:rgba(232,71,95,.10);color:var(--cr);border:1px solid rgba(232,71,95,.25);white-space:nowrap"><svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='8' r='4'/><path d='M4 20c0-4 3.6-7 8-7s8 3 8 7'/></svg>${p}</span>`).join('');
   return `
   <div style="margin:12px 16px 0;background:#fff;border-radius:var(--rm);padding:14px 16px;box-shadow:var(--sh);border:1px solid var(--bd)">
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px">
-      <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='var(--cr)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--tx3)">Contact for Borrowing</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='var(--cr)' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'/><circle cx='9' cy='7' r='4'/><path d='M23 21v-2a4 4 0 0 0-3-3.87'/><path d='M16 3.13a4 4 0 0 1 0 7.75'/></svg>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--tx3)">Contact for Borrowing</div>
+      </div>
+      ${adminMode ? `<button onclick="openEditPersonnel('${lid}','${locName}')" style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;background:var(--accs);color:var(--cr);border:1px solid rgba(232,71,95,.25);cursor:pointer;font-family:inherit"><svg width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7'/><path d='M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z'/></svg>Edit</button>` : ''}
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:6px">${pills}</div>
     <div style="margin-top:8px;font-size:11px;color:var(--tx3);font-style:italic">Approach any of these personnel to borrow AV equipment at this facility.</div>
@@ -819,9 +889,9 @@ function openDetail(lid, isAdmin){
   // Admin unlock bar
   document.getElementById('admin-unlock-bar').style.display = adminMode ? 'none' : 'block';
 
-  // Personnel card (view mode only)
+  // Personnel card
   const personnelEl = document.getElementById('personnel-card');
-  if(personnelEl) personnelEl.innerHTML = renderPersonnelCard(l.name);
+  if(personnelEl) personnelEl.innerHTML = renderPersonnelCard(l.name, adminMode);
 
   renderDetStats(); renderEqList(adminMode);
   showSc('detail'); setNav('');
@@ -1370,12 +1440,13 @@ function changeAPin(){
 const LS_KEY = 'chk_av_v3';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxz86gYC89F6qTzv7sCMTzPwY3vwGOt3ps36z_RV2I_IITga9x4MiFVDDh0Ov3sIh03Mw/exec';
 
-function getPayload(){ return { adminPin:S.adminPin, locs:S.locs, eq:S.eq }; }
+function getPayload(){ return { adminPin:S.adminPin, locs:S.locs, eq:S.eq, personnel:S.personnel }; }
 
 function applyPayload(p){
   if(p.adminPin) S.adminPin = p.adminPin;
   if(p.locs && p.locs.length) S.locs = p.locs;
   if(p.eq) S.eq = p.eq;
+  if(p.personnel) S.personnel = p.personnel;
 }
 
 // ── Save to localStorage (instant fallback)
