@@ -1433,23 +1433,42 @@ function changeAPin(){
 }
 
 // ════════════════════════════════════════
-//  STORAGE — Google Apps Script API (primary)
+//  STORAGE — Google Apps Script API (primary, cross-device sync)
 //           + localStorage (offline fallback)
 //           + Export/Import JSON (manual backup)
+//
+//  CROSS-DEVICE SYNC:
+//  • saveState() → saves to GAS with proper CORS (JSON body)
+//  • loadFromServer() → fetches latest data from GAS
+//  • Auto-poll every 30s to sync across devices
+//  • Manual refresh button in the header
+//  • Version/timestamp tracking to detect remote changes
 // ════════════════════════════════════════
-const LS_KEY = 'chk_av_v3';
+const LS_KEY  = 'chk_av_v3';
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbxz86gYC89F6qTzv7sCMTzPwY3vwGOt3ps36z_RV2I_IITga9x4MiFVDDh0Ov3sIh03Mw/exec';
 
-function getPayload(){ return { adminPin:S.adminPin, locs:S.locs, eq:S.eq, personnel:S.personnel }; }
+let _lastServerTs = 0;   // timestamp of the last data we fetched from server
+let _pollTimer    = null; // setInterval handle for auto-polling
 
-function applyPayload(p){
-  if(p.adminPin) S.adminPin = p.adminPin;
-  if(p.locs && p.locs.length) S.locs = p.locs;
-  if(p.eq) S.eq = p.eq;
-  if(p.personnel) S.personnel = p.personnel;
+function getPayload(){
+  return {
+    adminPin:  S.adminPin,
+    locs:      S.locs,
+    eq:        S.eq,
+    personnel: S.personnel,
+    _ts:       Date.now()   // timestamp so other devices can detect newer data
+  };
 }
 
-// ── Save to localStorage (instant fallback)
+function applyPayload(p){
+  if(p.adminPin)             S.adminPin   = p.adminPin;
+  if(p.locs  && p.locs.length) S.locs    = p.locs;
+  if(p.eq)                   S.eq         = p.eq;
+  if(p.personnel)            S.personnel  = p.personnel;
+  if(p._ts)                  _lastServerTs = p._ts;
+}
+
+// ── Save to localStorage (instant fallback / offline)
 function saveLocal(){
   try{ localStorage.setItem(LS_KEY, JSON.stringify(getPayload())); } catch(e){}
 }
@@ -1463,38 +1482,104 @@ function loadLocal(){
   return false;
 }
 
-// ── Save to Apps Script API
-// Uses no-cors + URLSearchParams to avoid CORS preflight block
+// ── Save to Apps Script API  (proper CORS — JSON body via a JSONP-like redirect)
+// GAS requires either no-cors (opaque) or the script to set CORS headers.
+// Strategy: try JSON POST first; if CORS blocks, fall back to no-cors form POST.
 async function saveState(){
   saveLocal();
   showSyncStatus('saving');
+  const payload = getPayload();
+
+  // --- attempt 1: proper JSON POST (works if GAS script sets CORS headers) ---
+  try{
+    const res = await fetch(GAS_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ action:'save', data: payload })
+    });
+    if(res.ok){
+      const json = await res.json().catch(()=>({}));
+      _lastServerTs = payload._ts;
+      showSyncStatus('saved');
+      return;
+    }
+  } catch(e1){ /* CORS blocked — fall through to no-cors form POST */ }
+
+  // --- attempt 2: no-cors form POST (opaque response, assumed success) ---
   try{
     const params = new URLSearchParams();
     params.append('action', 'save');
-    params.append('data', JSON.stringify(getPayload()));
-    // no-cors avoids preflight; Apps Script accepts form-encoded body
+    params.append('data',   JSON.stringify(payload));
     await fetch(GAS_URL, {
-      method: 'POST',
-      mode: 'no-cors',
+      method:  'POST',
+      mode:    'no-cors',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params.toString()
+      body:    params.toString()
     });
-    // no-cors responses are opaque (status 0), so we assume success if no throw
+    // opaque response (status 0) — assume success if no exception
+    _lastServerTs = payload._ts;
     showSyncStatus('saved');
-  } catch(e){
-    console.warn('Apps Script save failed:', e);
+  } catch(e2){
+    console.warn('GAS save failed:', e2);
     showSyncStatus('local');
   }
 }
 
 // ── Load from Apps Script API
-async function loadFromServer(){
+async function loadFromServer(silent){
+  if(!silent) showSyncStatus('loading');
   try{
-    const res = await fetch(GAS_URL + '?action=load', { method: 'GET' });
+    const res  = await fetch(GAS_URL + '?action=load&_=' + Date.now(), { method:'GET' });
     const json = await res.json();
-    if(json && json.data){ applyPayload(json.data); saveLocal(); return true; }
-  } catch(e){ console.warn('Apps Script load failed:', e); }
+    if(json && json.data){
+      const serverTs = json.data._ts || 0;
+      // Only apply if server data is newer than what we last fetched
+      if(serverTs > _lastServerTs || !silent){
+        applyPayload(json.data);
+        saveLocal();
+        if(!silent) hideSyncStatus();
+        return true;
+      }
+    }
+  } catch(e){ console.warn('GAS load failed:', e); }
+  if(!silent) hideSyncStatus();
   return false;
+}
+
+// ── Auto-poll: silently check for remote updates every 30 seconds
+function startAutoPoll(){
+  if(_pollTimer) clearInterval(_pollTimer);
+  _pollTimer = setInterval(async ()=>{
+    const changed = await loadFromServer(true /*silent*/);
+    if(changed){
+      // Remote data changed → re-render current screen without disrupting user
+      renderHome();
+      // If user is on detail screen, refresh it too
+      const detScreen = document.getElementById('s-detail');
+      if(detScreen && detScreen.classList.contains('active')){
+        const locId = detScreen.dataset.locId;
+        if(locId) showDetail(locId, false /*no re-auth*/);
+      }
+      showSyncStatus('synced');
+    }
+  }, 30000); // every 30 s
+}
+
+// ── Manual refresh (call from the refresh button in header)
+async function manualRefresh(){
+  showSyncStatus('loading');
+  const changed = await loadFromServer(false);
+  if(changed){
+    renderHome();
+    const detScreen = document.getElementById('s-detail');
+    if(detScreen && detScreen.classList.contains('active')){
+      const locId = detScreen.dataset.locId;
+      if(locId) showDetail(locId, false);
+    }
+    showSyncStatus('synced');
+  } else {
+    showSyncStatus('uptodate');
+  }
 }
 
 // ── Export data as downloadable JSON file
@@ -1513,7 +1598,7 @@ function exportData(){
 
 // ── Import data from a JSON backup file
 function importData(evt){
-  const file = evt.target.files[0];
+  const file   = evt.target.files[0];
   const result = document.getElementById('import-result');
   if(!file) return;
   const reader = new FileReader();
@@ -1543,14 +1628,27 @@ function importData(evt){
 // ── Boot
 window.onload = async () => {
   showSyncStatus('loading');
-  // Show local data instantly
   loadLocal();
   renderHome();
-  // Then load from Apps Script API (newest data)
-  const ok = await loadFromServer();
+  const ok = await loadFromServer(false);
   if(ok) renderHome();
   hideSyncStatus();
+  startAutoPoll();          // ← start 30-second background sync
+  injectRefreshBtn();       // ← add refresh button to header
 };
+
+// ── Inject a manual refresh button into the home header
+function injectRefreshBtn(){
+  const hdrRow = document.querySelector('#s-home .hdr-row');
+  if(!hdrRow) return;
+  const btn = document.createElement('button');
+  btn.className = 'admin-btn';
+  btn.id        = 'refresh-btn';
+  btn.onclick   = manualRefresh;
+  btn.title     = 'Sync latest data from all devices';
+  btn.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg> Sync`;
+  hdrRow.prepend(btn);
+}
 
 // ── Sync status toast
 function showSyncStatus(state){
@@ -1563,21 +1661,25 @@ function showSyncStatus(state){
   }
   const spin = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="animation:spin 1s linear infinite;flex-shrink:0"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>';
   const cfg = {
-    loading:  { bg:'#1e3a8a', text:'#fff', msg:spin+' Loading…', persist:true },
-    saving:   { bg:'#7a1228', text:'#fff', msg:spin+' Saving…',  persist:true },
-    saved:    { bg:'#15803d', text:'#fff', msg:'☁️ Saved to Google Sheets' },
-    local:    { bg:'#92400e', text:'#fff', msg:'💾 Saved locally (offline)' },
-    exported: { bg:'#1e40af', text:'#fff', msg:'📥 Backup downloaded' },
-    error:    { bg:'#b91c1c', text:'#fff', msg:'⚠️ Save failed' },
+    loading:   { bg:'#1e3a8a', text:'#fff', msg:spin+' Loading…',                persist:true  },
+    saving:    { bg:'#7a1228', text:'#fff', msg:spin+' Saving…',                 persist:true  },
+    saved:     { bg:'#15803d', text:'#fff', msg:'☁️ Saved to Google Sheets'                    },
+    synced:    { bg:'#0f766e', text:'#fff', msg:'🔄 Synced — new data from another device'     },
+    uptodate:  { bg:'#15803d', text:'#fff', msg:'✅ Already up to date'                        },
+    local:     { bg:'#92400e', text:'#fff', msg:'💾 Saved locally (offline — will sync later)' },
+    exported:  { bg:'#1e40af', text:'#fff', msg:'📥 Backup downloaded'                         },
+    error:     { bg:'#b91c1c', text:'#fff', msg:'⚠️ Save failed'                               },
   };
   const c = cfg[state] || cfg.saved;
-  el.style.background=c.bg; el.style.color=c.text;
-  el.innerHTML=c.msg; el.style.opacity='1';
-  if(!c.persist) setTimeout(()=>{ el.style.opacity='0'; }, 2500);
+  el.style.background = c.bg;
+  el.style.color      = c.text;
+  el.innerHTML        = c.msg;
+  el.style.opacity    = '1';
+  if(!c.persist) setTimeout(()=>{ el.style.opacity='0'; }, 3000);
 }
 function hideSyncStatus(){
-  const el=document.getElementById('sync-toast');
-  if(el) el.style.opacity='0';
+  const el = document.getElementById('sync-toast');
+  if(el) el.style.opacity = '0';
 }
 
 </script>
